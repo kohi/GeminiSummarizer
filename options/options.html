@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web & YouTube to Gemini Summarizer - 設定</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="page-container">
+    <!-- Header -->
+    <header class="page-header">
+      <div class="header-brand">
+        <svg class="header-logo" viewBox="0 0 24 24">
+          <path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/>
+        </svg>
+        <div>
+          <h1>Web & YouTube to Gemini Summarizer</h1>
+          <p class="subtitle">広告カット・複数アカウント管理・プロンプトカスタマイズ設定</p>
+        </div>
+      </div>
+      <button id="btn-save-top" class="btn btn-primary">設定を保存</button>
+    </header>
+
+    <main class="content-grid">
+      <!-- Section 1: Accounts Management -->
+      <section class="settings-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-icon">👤</span>
+            <h2>Google / Gemini アカウント設定</h2>
+          </div>
+          <span class="card-desc">Googleに複数アカウントでログインしている場合、Geminiを開くアカウント（u/0, u/1...）を指定・管理できます。</span>
+        </div>
+
+        <div class="accounts-list-container">
+          <table class="data-table" id="accounts-table">
+            <thead>
+              <tr>
+                <th style="width: 100px;">アカウント番号</th>
+                <th>表示名 / ラベル</th>
+                <th style="width: 110px;">デフォルト</th>
+                <th style="width: 80px;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="accounts-tbody">
+              <!-- Dynamically rendered -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="add-row-form">
+          <div class="input-group">
+            <label for="new-acc-index">番号 (u/0, u/1...):</label>
+            <input type="number" id="new-acc-index" min="0" max="9" value="0" class="input-field" style="width: 80px;">
+          </div>
+          <div class="input-group flex-1">
+            <label for="new-acc-label">表示ラベル:</label>
+            <input type="text" id="new-acc-label" placeholder="例: 個人用 / 仕事用 / メイン" class="input-field">
+          </div>
+          <button id="btn-add-account" class="btn btn-secondary">＋ アカウント追加</button>
+        </div>
+
+        <div class="info-callout">
+          <strong>💡 Googleアカウント番号について:</strong>
+          ChromeでGeminiを開いた際のアドレスバーのURLをご確認ください。<br>
+          ・1つ目のログインアカウント: <code>https://gemini.google.com/u/0/</code>（番号: 0）<br>
+          ・2つ目のログインアカウント: <code>https://gemini.google.com/u/1/</code>（番号: 1）
+        </div>
+      </section>
+
+      <!-- Section 2: Prompt Templates -->
+      <section class="settings-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-icon">📝</span>
+            <h2>要約プロンプト・テンプレート管理</h2>
+          </div>
+          <span class="card-desc">Webページ用・YouTube用・選択テキスト用の要約指示文を自由にカスタマイズ・追加できます。</span>
+        </div>
+
+        <div class="templates-manager">
+          <div class="template-selector-bar">
+            <label for="opt-template-select">編集するテンプレート:</label>
+            <select id="opt-template-select" class="input-field"></select>
+            <button id="btn-new-template" class="btn btn-secondary btn-sm">＋ 新規作成</button>
+            <button id="btn-delete-template" class="btn btn-danger btn-sm">削除</button>
+          </div>
+
+          <div class="template-edit-fields">
+            <div class="input-group">
+              <label for="template-name-input">テンプレート名:</label>
+              <input type="text" id="template-name-input" class="input-field">
+            </div>
+
+            <div class="input-group">
+              <label for="template-content-input">
+                <span>プロンプト内容:</span>
+                <span class="var-help">利用可能タグ: <code>{title}</code>（タイトル）, <code>{url}</code>（URL）, <code>{content}</code>（広告除去済み本文・選択テキスト）</span>
+              </label>
+              <textarea id="template-content-input" class="input-field textarea-field" rows="10"></textarea>
+            </div>
+          </div>
+
+          <div class="template-footer-actions">
+            <button id="btn-reset-templates" class="btn btn-outline btn-sm">初期テンプレートに戻す</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 3: General Options -->
+      <section class="settings-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-icon">⚙️</span>
+            <h2>一般動作・抽出設定</h2>
+          </div>
+        </div>
+
+        <div class="options-list">
+          <label class="setting-item">
+            <div class="setting-text">
+              <span class="setting-title">プロンプト自動送信 (Auto Submit)</span>
+              <span class="setting-desc">Geminiタブを開いてプロンプトを入力後、自動で送信ボタンを押して要約生成を開始します。OFFにすると入力状態で一時停止します。</span>
+            </div>
+            <input type="checkbox" id="opt-auto-submit" class="toggle-checkbox">
+          </label>
+
+          <label class="setting-item">
+            <div class="setting-text">
+              <span class="setting-title">YouTube画面内に「Geminiで要約」ボタンを表示</span>
+              <span class="setting-desc">YouTubeの動画再生ページ（タイトルの下）に直接要約ボタンを埋め込みます。</span>
+            </div>
+            <input type="checkbox" id="opt-show-button" class="toggle-checkbox">
+          </label>
+
+          <div class="setting-item" style="cursor: default;">
+            <div class="setting-text">
+              <span class="setting-title">Webページ本文抽出の最大文字数</span>
+              <span class="setting-desc">Geminiの入力制限に合わせて、広告除去後の本文テキストをトリミングする上限文字数です。</span>
+            </div>
+            <input type="number" id="opt-max-chars" class="input-field" min="1000" max="30000" step="1000" style="width: 100px;">
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Floating Save Banner -->
+    <div id="save-toast" class="save-toast">設定を保存しました ✨</div>
+  </div>
+
+  <script src="../utils/defaults.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

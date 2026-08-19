@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web & YouTube to Gemini</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-group">
+        <svg class="logo-icon" viewBox="0 0 24 24">
+          <path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/>
+        </svg>
+        <span class="app-title">Gemini 要約 (Web & YouTube)</span>
+      </div>
+      <button id="btn-open-options" class="icon-button" title="設定を開く">
+        <svg viewBox="0 0 24 24" width="18" height="18">
+          <path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-body">
+      <!-- Target Content Card -->
+      <section class="card content-card" id="content-card">
+        <div class="card-top-row">
+          <span id="badge-page-type" class="badge badge-web">🌐 Webページ</span>
+          <span id="badge-clean-status" class="badge-status">🛡️ 広告・ノイズカット済</span>
+        </div>
+        <div class="content-info">
+          <div class="content-title" id="page-title">タイトルを取得中...</div>
+          <div class="content-url" id="page-url">URLを取得中...</div>
+        </div>
+      </section>
+
+      <!-- Clean Content Extract Stats -->
+      <div id="extract-stats-bar" class="extract-stats-bar" style="display: none;">
+        <span>📝 抽出本文: <strong id="stat-char-count">0</strong> 文字</span>
+        <span id="stat-truncated-note" class="text-muted" style="display: none;">(一部抜粋)</span>
+      </div>
+
+      <!-- Settings Section -->
+      <div class="form-group">
+        <label for="account-select" class="field-label">
+          <span>Gemini アカウント</span>
+          <a href="#" id="link-manage-accounts" class="helper-link">アカウント管理</a>
+        </label>
+        <div class="select-wrapper">
+          <select id="account-select" class="custom-select"></select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="template-select" class="field-label">要約スタイル・プロンプト</label>
+        <div class="select-wrapper">
+          <select id="template-select" class="custom-select"></select>
+        </div>
+      </div>
+
+      <!-- Prompt Preview / Customization Accordion -->
+      <details class="prompt-details">
+        <summary class="prompt-summary">プロンプトをプレビュー・編集</summary>
+        <div class="prompt-editor-wrap">
+          <textarea id="prompt-preview" class="prompt-textarea" rows="6"></textarea>
+          <div class="editor-buttons">
+            <button id="btn-reset-prompt" class="small-btn">元に戻す</button>
+          </div>
+        </div>
+      </details>
+
+      <div class="checkbox-group">
+        <label class="custom-checkbox">
+          <input type="checkbox" id="chk-autosubmit">
+          <span class="checkmark"></span>
+          <span>Geminiに送信後、自動で回答生成を開始する</span>
+        </label>
+      </div>
+
+      <!-- Action Button -->
+      <button id="btn-summarize" class="primary-btn">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/>
+        </svg>
+        <span id="btn-summarize-text">Geminiで要約を開始</span>
+      </button>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span id="status-message"></span>
+    </footer>
+  </div>
+
+  <script src="../utils/defaults.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

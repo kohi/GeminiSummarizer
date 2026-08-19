@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "Web & YouTube to Gemini Summarizer (広告カット・アカウント指定対応)",
+  "version": "1.1.0",
+  "description": "Webページ（広告自動除去）やYouTube動画をGoogle Geminiに直接送信して要約・重要ポイントを出力。複数アカウント切り替え対応。",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
+    "default_title": "Geminiで要約 (Web & YouTube)"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "contextMenus",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content_scripts/youtube-inject.js"],
+      "css": ["content_scripts/youtube-inject.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "js": ["content_scripts/gemini-inject.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
