@@ -89,52 +89,51 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Populate Templates
+  // Populate Templates with Contextual Defaults and Independent Memory
   function populateTemplates() {
     templateSelect.innerHTML = '';
     const templates = settings.promptTemplates || DEFAULT_PROMPT_TEMPLATES;
 
-    // Filter templates according to context
     const primaryCategory = isYt ? 'youtube' : 'web';
     
-    // Choose appropriate default ID
-    let preferredId = isYt 
+    // Choose saved ID independently for YouTube and Web
+    let savedTemplateId = isYt 
       ? (settings.activeYtPromptId || 'yt_standard') 
       : (settings.activeWebPromptId || 'web_standard');
 
-    // Verify preferred template matches context; if not, fallback to valid one
-    const matchingPreferred = templates.find(t => t.id === preferredId && (t.category === primaryCategory || (!t.category && isYt === t.id.startsWith('yt_'))));
-    if (!matchingPreferred) {
-      const firstValid = templates.find(t => t.category === primaryCategory || (!t.category && isYt === t.id.startsWith('yt_')));
-      preferredId = firstValid ? firstValid.id : (isYt ? 'yt_standard' : 'web_standard');
+    // If the saved ID is not in templates or belongs to wrong category, get the first valid template for this category
+    let activeTemplate = templates.find(t => t.id === savedTemplateId);
+    if (!activeTemplate || (activeTemplate.category && activeTemplate.category !== primaryCategory)) {
+      activeTemplate = templates.find(t => t.category === primaryCategory) || templates[0];
+      savedTemplateId = activeTemplate ? activeTemplate.id : (isYt ? 'yt_standard' : 'web_standard');
     }
 
-    const relevantGroup = document.createElement('optgroup');
-    relevantGroup.label = isYt ? '🎬 YouTube用テンプレート' : '🌐 Web記事用テンプレート (広告カット)';
+    const primaryOptGroup = document.createElement('optgroup');
+    primaryOptGroup.label = isYt ? '🎬 YouTube用テンプレート (自動選択)' : '🌐 Web記事用テンプレート (自動選択)';
 
-    const otherGroup = document.createElement('optgroup');
-    otherGroup.label = isYt ? 'その他のテンプレート (Web記事用)' : 'その他のテンプレート (YouTube用)';
+    const secondaryOptGroup = document.createElement('optgroup');
+    secondaryOptGroup.label = isYt ? 'その他のテンプレート (Web用)' : 'その他のテンプレート (YouTube用)';
 
     templates.forEach((tmpl) => {
       const option = document.createElement('option');
       option.value = tmpl.id;
       option.textContent = tmpl.name;
 
-      if (tmpl.id === preferredId) {
+      if (tmpl.id === savedTemplateId) {
         option.selected = true;
       }
 
       const isPrimary = (tmpl.category === primaryCategory) || (!tmpl.category && isYt === tmpl.id.startsWith('yt_'));
       if (isPrimary) {
-        relevantGroup.appendChild(option);
+        primaryOptGroup.appendChild(option);
       } else {
-        otherGroup.appendChild(option);
+        secondaryOptGroup.appendChild(option);
       }
     });
 
-    templateSelect.appendChild(relevantGroup);
-    if (otherGroup.children.length > 0) {
-      templateSelect.appendChild(otherGroup);
+    templateSelect.appendChild(primaryOptGroup);
+    if (secondaryOptGroup.children.length > 0) {
+      templateSelect.appendChild(secondaryOptGroup);
     }
   }
 
@@ -154,12 +153,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Event Listeners
   templateSelect.addEventListener('change', () => {
     updatePromptPreview();
+    const selectedId = templateSelect.value;
     if (isYt) {
-      settings.activeYtPromptId = templateSelect.value;
-      saveSettings({ activeYtPromptId: settings.activeYtPromptId });
+      settings.activeYtPromptId = selectedId;
+      saveSettings({ activeYtPromptId: selectedId });
     } else {
-      settings.activeWebPromptId = templateSelect.value;
-      saveSettings({ activeWebPromptId: settings.activeWebPromptId });
+      settings.activeWebPromptId = selectedId;
+      saveSettings({ activeWebPromptId: selectedId });
     }
   });
 

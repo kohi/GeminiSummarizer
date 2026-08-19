@@ -13,7 +13,7 @@
   let lastInjectedUrl = '';
 
   /**
-   * Check if current page is a watch page or shorts
+   * Check if current page is a video watch page or shorts
    */
   function isWatchPage() {
     const path = window.location.pathname;
@@ -57,13 +57,12 @@
   }
 
   /**
-   * Find suitable insertion container with comprehensive fallback
+   * Find best target container with exhaustive fallbacks
    */
   function findTargetContainer() {
     const isShorts = window.location.pathname.startsWith('/shorts/');
 
     if (isShorts) {
-      // Shorts active reel container
       const activeReel = document.querySelector('ytd-reel-video-renderer[is-active]') || document.querySelector('ytd-reel-video-renderer');
       if (activeReel) {
         const shortsActions = activeReel.querySelector('#actions') || activeReel.querySelector('#overlay');
@@ -72,41 +71,46 @@
       return null;
     }
 
-    // Standard Video Watch Page:
-    // 1. Primary: next to Subscribe button in owner container
+    // Candidate 1: Right after the Subscribe button (#subscribe-button)
+    const subscribeBtn = document.querySelector('ytd-watch-metadata #subscribe-button') ||
+                         document.querySelector('#subscribe-button') ||
+                         document.querySelector('ytd-subscribe-button-renderer');
+    if (subscribeBtn && subscribeBtn.parentElement) {
+      return { element: subscribeBtn, position: 'after' };
+    }
+
+    // Candidate 2: Next to Channel Owner section (#owner)
     const owner = document.querySelector('ytd-watch-metadata #owner') || 
-                  document.querySelector('#owner') || 
-                  document.querySelector('#subscribe-button');
-    if (owner && isVisible(owner)) {
+                  document.querySelector('#owner') ||
+                  document.querySelector('ytd-video-owner-renderer');
+    if (owner && owner.parentElement) {
       return { element: owner, position: 'after' };
     }
 
-    // 2. Action buttons bar (Like / Share / Download buttons)
+    // Candidate 3: Inside top-level action buttons bar (Like/Share buttons)
     const topLevelButtons = document.querySelector('ytd-watch-metadata #top-level-buttons-computed') ||
                             document.querySelector('#top-level-buttons-computed') ||
-                            document.querySelector('#actions-inner #top-level-buttons-computed');
-    if (topLevelButtons && isVisible(topLevelButtons)) {
+                            document.querySelector('#actions-inner #top-level-buttons-computed') ||
+                            document.querySelector('ytd-menu-renderer #top-level-buttons-computed');
+    if (topLevelButtons) {
       return { element: topLevelButtons, position: 'prepend' };
     }
 
-    // 3. Metadata title container
+    // Candidate 4: Next to Title section (#title)
     const titleContainer = document.querySelector('ytd-watch-metadata #title') ||
-                           document.querySelector('#above-the-fold #title');
-    if (titleContainer && isVisible(titleContainer)) {
+                           document.querySelector('#above-the-fold #title') ||
+                           document.querySelector('h1.ytd-watch-metadata');
+    if (titleContainer && titleContainer.parentElement) {
       return { element: titleContainer, position: 'after' };
     }
 
-    // 4. Fallback: below title or inside ytd-watch-metadata
-    const watchMetadata = document.querySelector('ytd-watch-metadata');
-    if (watchMetadata) {
-      return { element: watchMetadata, position: 'append' };
+    // Candidate 5: Generic metadata container (#above-the-fold or ytd-watch-metadata)
+    const aboveTheFold = document.querySelector('#above-the-fold') || document.querySelector('ytd-watch-metadata');
+    if (aboveTheFold) {
+      return { element: aboveTheFold, position: 'append' };
     }
 
     return null;
-  }
-
-  function isVisible(elem) {
-    return !!(elem && (elem.offsetWidth || elem.offsetHeight || elem.getClientRects().length));
   }
 
   /**
@@ -146,18 +150,23 @@
     const currentUrl = getVideoUrl();
     const existing = document.getElementById('yt-gemini-summary-container');
 
-    // If button is already placed and attached to the DOM, verify URL
+    // If button already exists in DOM
     if (existing && document.body.contains(existing)) {
-      if (lastInjectedUrl === currentUrl) {
-        return; // All good
+      // Check if attached button is visible and URL matches
+      const rect = existing.getBoundingClientRect();
+      const isVisible = rect.width > 0 && rect.height > 0;
+
+      if (lastInjectedUrl === currentUrl && isVisible) {
+        return; // Already cleanly rendered
       }
-      // URL changed in SPA, re-inject
+
+      // If URL changed or previous container became hidden/detached, remove and re-inject
       existing.remove();
     }
 
     const targetInfo = findTargetContainer();
     if (!targetInfo || !targetInfo.element) {
-      return; // Target container not ready yet
+      return; // DOM not ready yet
     }
 
     const settings = await getSafeSettings();
@@ -234,15 +243,18 @@
 
     // Insert according to position
     const { element, position } = targetInfo;
-    if (position === 'after' && element.parentElement) {
-      element.parentElement.insertBefore(container, element.nextSibling);
-    } else if (position === 'prepend' && element.firstChild) {
-      element.insertBefore(container, element.firstChild);
-    } else {
-      element.appendChild(container);
+    try {
+      if (position === 'after' && element.parentElement) {
+        element.parentElement.insertBefore(container, element.nextSibling);
+      } else if (position === 'prepend' && element.firstChild) {
+        element.insertBefore(container, element.firstChild);
+      } else {
+        element.appendChild(container);
+      }
+      lastInjectedUrl = currentUrl;
+    } catch (insertErr) {
+      console.warn('[YouTube Summarizer] Failed to insert button:', insertErr);
     }
-
-    lastInjectedUrl = currentUrl;
   }
 
   function removeExistingButton() {
@@ -279,12 +291,14 @@
 
   // Event Listeners for YouTube navigation
   window.addEventListener('yt-navigate-finish', () => {
-    setTimeout(tryInjectButton, 300);
-    setTimeout(tryInjectButton, 1000);
+    setTimeout(tryInjectButton, 200);
+    setTimeout(tryInjectButton, 800);
+    setTimeout(tryInjectButton, 1800);
   });
 
   window.addEventListener('yt-page-data-updated', () => {
-    setTimeout(tryInjectButton, 500);
+    setTimeout(tryInjectButton, 300);
+    setTimeout(tryInjectButton, 1000);
   });
 
   window.addEventListener('load', () => {
@@ -293,19 +307,25 @@
 
   // Safety net: Continuous check with MutationObserver
   const observer = new MutationObserver(() => {
-    if (isWatchPage() && !document.getElementById('yt-gemini-summary-container')) {
-      tryInjectButton();
+    if (isWatchPage()) {
+      const btn = document.getElementById('yt-gemini-summary-container');
+      if (!btn || !document.body.contains(btn)) {
+        tryInjectButton();
+      }
     }
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // Periodic safety check every 1.5 seconds if on watch page and button is missing
+  // Periodic safety check every 1.2 seconds if on watch page and button is missing
   setInterval(() => {
-    if (isWatchPage() && !document.getElementById('yt-gemini-summary-container')) {
-      tryInjectButton();
+    if (isWatchPage()) {
+      const btn = document.getElementById('yt-gemini-summary-container');
+      if (!btn || !document.body.contains(btn)) {
+        tryInjectButton();
+      }
     }
-  }, 1500);
+  }, 1200);
 
   // Initial trigger
   tryInjectButton();

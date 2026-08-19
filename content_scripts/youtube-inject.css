@@ -1,127 +1,133 @@
 /* Styles for the YouTube on-page summarize button */
 
 .yt-gemini-btn-container {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 8px;
-  vertical-align: middle;
-  font-family: "Roboto", "YouTube Sans", -apple-system, BlinkMacSystemFont, sans-serif;
-  position: relative;
-  z-index: 10;
+  display: inline-flex !important;
+  align-items: center !important;
+  margin: 0 8px !important;
+  vertical-align: middle !important;
+  font-family: "Roboto", "YouTube Sans", -apple-system, BlinkMacSystemFont, sans-serif !important;
+  position: relative !important;
+  z-index: 100 !important;
+  flex-shrink: 0 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 .yt-gemini-summary-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 14px;
-  height: 36px;
-  border-radius: 18px;
-  border: 1px solid rgba(26, 115, 232, 0.3);
-  background: linear-gradient(135deg, #1a73e8 0%, #8e24aa 100%);
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 0 14px !important;
+  height: 36px !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(26, 115, 232, 0.3) !important;
+  background: linear-gradient(135deg, #1a73e8 0%, #8e24aa 100%) !important;
   color: #ffffff !important;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(26, 115, 232, 0.25);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  user-select: none;
-  text-decoration: none;
-  white-space: nowrap;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 6px rgba(26, 115, 232, 0.25) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  user-select: none !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
 }
 
 .yt-gemini-summary-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4);
-  background: linear-gradient(135deg, #185abc 0%, #7b1fa2 100%);
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4) !important;
+  background: linear-gradient(135deg, #185abc 0%, #7b1fa2 100%) !important;
 }
 
 .yt-gemini-summary-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 3px rgba(26, 115, 232, 0.3);
+  transform: translateY(0) !important;
+  box-shadow: 0 1px 3px rgba(26, 115, 232, 0.3) !important;
 }
 
 .yt-gemini-summary-btn svg {
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
-  flex-shrink: 0;
+  width: 16px !important;
+  height: 16px !important;
+  fill: currentColor !important;
+  flex-shrink: 0 !important;
 }
 
 .yt-gemini-account-badge {
-  font-size: 10px;
-  background: rgba(255, 255, 255, 0.25);
-  padding: 2px 6px;
-  border-radius: 8px;
-  margin-left: 2px;
+  font-size: 10px !important;
+  background: rgba(255, 255, 255, 0.25) !important;
+  padding: 2px 6px !important;
+  border-radius: 8px !important;
+  margin-left: 2px !important;
 }
 
-/* Dropdown Menu for choosing account or template directly from YouTube */
+/* Dropdown Menu */
 .yt-gemini-dropdown-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 36px;
-  margin-left: -8px;
-  border-top-right-radius: 18px;
-  border-bottom-right-radius: 18px;
-  border: 1px solid rgba(26, 115, 232, 0.3);
-  border-left: 1px solid rgba(255, 255, 255, 0.2);
-  background: linear-gradient(135deg, #8e24aa 0%, #7b1fa2 100%);
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.2s;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 24px !important;
+  height: 36px !important;
+  margin-left: -8px !important;
+  border-top-right-radius: 18px !important;
+  border-bottom-right-radius: 18px !important;
+  border: 1px solid rgba(26, 115, 232, 0.3) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: linear-gradient(135deg, #8e24aa 0%, #7b1fa2 100%) !important;
+  color: #fff !important;
+  cursor: pointer !important;
+  transition: background 0.2s !important;
+  flex-shrink: 0 !important;
 }
 
 .yt-gemini-dropdown-btn:hover {
-  background: #6a1b9a;
+  background: #6a1b9a !important;
 }
 
 .yt-gemini-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: 220px;
-  background-color: var(--yt-spec-brand-background-primary, #212121);
-  color: var(--yt-spec-text-primary, #fff);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  padding: 8px 0;
-  display: none;
-  flex-direction: column;
-  z-index: 9999;
+  position: absolute !important;
+  top: calc(100% + 6px) !important;
+  left: 0 !important;
+  min-width: 220px !important;
+  background-color: var(--yt-spec-brand-background-primary, #212121) !important;
+  color: var(--yt-spec-text-primary, #fff) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+  padding: 8px 0 !important;
+  display: none !important;
+  flex-direction: column !important;
+  z-index: 9999 !important;
 }
 
 .yt-gemini-menu.open {
-  display: flex;
+  display: flex !important;
 }
 
 .yt-gemini-menu-header {
-  padding: 6px 14px;
-  font-size: 11px;
-  text-transform: uppercase;
-  color: var(--yt-spec-text-secondary, #aaa);
-  letter-spacing: 0.5px;
+  padding: 6px 14px !important;
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  color: var(--yt-spec-text-secondary, #aaa) !important;
+  letter-spacing: 0.5px !important;
 }
 
 .yt-gemini-menu-item {
-  padding: 8px 14px;
-  font-size: 13px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  transition: background-color 0.15s;
-  color: var(--yt-spec-text-primary, #f1f1f1);
+  padding: 8px 14px !important;
+  font-size: 13px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  transition: background-color 0.15s !important;
+  color: var(--yt-spec-text-primary, #f1f1f1) !important;
 }
 
 .yt-gemini-menu-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .yt-gemini-menu-item.active {
-  color: #8ab4f8;
-  font-weight: 500;
+  color: #8ab4f8 !important;
+  font-weight: 500 !important;
 }
