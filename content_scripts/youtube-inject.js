@@ -1,5 +1,5 @@
 // Content script injected into YouTube pages
-// Inserts the "Geminiで要約" button reliably on video watch pages and Shorts.
+// Inserts the "Geminiで要約" button cleanly and strictly prevents duplicate buttons.
 
 (function () {
   'use strict';
@@ -10,7 +10,11 @@
     </svg>
   `;
 
-  let lastInjectedUrl = '';
+  const BUTTON_CONTAINER_ID = 'yt-gemini-summary-container';
+  const BUTTON_CLASS = 'yt-gemini-btn-container';
+
+  let isInjecting = false;
+  let lastInjectedVideoId = '';
 
   /**
    * Check if current page is a video watch page or shorts
@@ -18,6 +22,20 @@
   function isWatchPage() {
     const path = window.location.pathname;
     return path === '/watch' || path.startsWith('/shorts/');
+  }
+
+  /**
+   * Get unique Video Identifier
+   */
+  function getVideoId() {
+    const url = new URL(window.location.href);
+    if (url.pathname === '/watch') {
+      return url.searchParams.get('v') || url.href;
+    }
+    if (url.pathname.startsWith('/shorts/')) {
+      return url.pathname.split('/')[2] || url.href;
+    }
+    return url.href;
   }
 
   /**
@@ -57,7 +75,29 @@
   }
 
   /**
-   * Find best target container with exhaustive fallbacks
+   * Strictly remove all duplicate / existing summary buttons across the entire page
+   */
+  function cleanupExistingButtons() {
+    const allButtons = document.querySelectorAll(`.${BUTTON_CLASS}, #${BUTTON_CONTAINER_ID}`);
+    allButtons.forEach(btn => btn.remove());
+  }
+
+  /**
+   * Ensure only a single button exists. If multiple, remove excess.
+   */
+  function deduplicateButtons() {
+    const allButtons = document.querySelectorAll(`.${BUTTON_CLASS}, #${BUTTON_CONTAINER_ID}`);
+    if (allButtons.length > 1) {
+      // Keep only the first valid attached button and remove the rest
+      for (let i = 1; i < allButtons.length; i++) {
+        allButtons[i].remove();
+      }
+    }
+    return allButtons.length >= 1;
+  }
+
+  /**
+   * Find single best container location with strict hierarchy
    */
   function findTargetContainer() {
     const isShorts = window.location.pathname.startsWith('/shorts/');
@@ -71,42 +111,34 @@
       return null;
     }
 
-    // Candidate 1: Right after the Subscribe button (#subscribe-button)
+    // Strict priority list:
+    // 1. Channel Subscribe Button Area (Most prominent and natural)
     const subscribeBtn = document.querySelector('ytd-watch-metadata #subscribe-button') ||
                          document.querySelector('#subscribe-button') ||
                          document.querySelector('ytd-subscribe-button-renderer');
-    if (subscribeBtn && subscribeBtn.parentElement) {
+    if (subscribeBtn && subscribeBtn.parentElement && document.body.contains(subscribeBtn)) {
       return { element: subscribeBtn, position: 'after' };
     }
 
-    // Candidate 2: Next to Channel Owner section (#owner)
-    const owner = document.querySelector('ytd-watch-metadata #owner') || 
-                  document.querySelector('#owner') ||
-                  document.querySelector('ytd-video-owner-renderer');
-    if (owner && owner.parentElement) {
-      return { element: owner, position: 'after' };
-    }
-
-    // Candidate 3: Inside top-level action buttons bar (Like/Share buttons)
+    // 2. Action Bar (Like/Share/Download buttons)
     const topLevelButtons = document.querySelector('ytd-watch-metadata #top-level-buttons-computed') ||
                             document.querySelector('#top-level-buttons-computed') ||
-                            document.querySelector('#actions-inner #top-level-buttons-computed') ||
-                            document.querySelector('ytd-menu-renderer #top-level-buttons-computed');
-    if (topLevelButtons) {
+                            document.querySelector('#actions-inner #top-level-buttons-computed');
+    if (topLevelButtons && document.body.contains(topLevelButtons)) {
       return { element: topLevelButtons, position: 'prepend' };
     }
 
-    // Candidate 4: Next to Title section (#title)
-    const titleContainer = document.querySelector('ytd-watch-metadata #title') ||
-                           document.querySelector('#above-the-fold #title') ||
-                           document.querySelector('h1.ytd-watch-metadata');
-    if (titleContainer && titleContainer.parentElement) {
-      return { element: titleContainer, position: 'after' };
+    // 3. Channel Owner block
+    const owner = document.querySelector('ytd-watch-metadata #owner') || 
+                  document.querySelector('#owner') ||
+                  document.querySelector('ytd-video-owner-renderer');
+    if (owner && owner.parentElement && document.body.contains(owner)) {
+      return { element: owner, position: 'after' };
     }
 
-    // Candidate 5: Generic metadata container (#above-the-fold or ytd-watch-metadata)
+    // 4. Above the fold metadata container
     const aboveTheFold = document.querySelector('#above-the-fold') || document.querySelector('ytd-watch-metadata');
-    if (aboveTheFold) {
+    if (aboveTheFold && document.body.contains(aboveTheFold)) {
       return { element: aboveTheFold, position: 'append' };
     }
 
@@ -114,7 +146,7 @@
   }
 
   /**
-   * Safe settings fetch with default fallback
+   * Fetch extension settings safely
    */
   async function getSafeSettings() {
     try {
@@ -139,111 +171,112 @@
   }
 
   /**
-   * Inject Summarize Button into YouTube UI
+   * Main injection routine with concurrency lock and strict single-instance guarantee
    */
-  async function tryInjectButton() {
+  async function injectSummarizeButton() {
     if (!isWatchPage()) {
-      removeExistingButton();
+      cleanupExistingButtons();
+      lastInjectedVideoId = '';
       return;
     }
 
-    const currentUrl = getVideoUrl();
-    const existing = document.getElementById('yt-gemini-summary-container');
+    const currentVideoId = getVideoId();
 
-    // If button already exists in DOM
-    if (existing && document.body.contains(existing)) {
-      // Check if attached button is visible and URL matches
-      const rect = existing.getBoundingClientRect();
-      const isVisible = rect.width > 0 && rect.height > 0;
+    // Check if duplicate buttons already exist
+    const hasExisting = deduplicateButtons();
 
-      if (lastInjectedUrl === currentUrl && isVisible) {
-        return; // Already cleanly rendered
+    // If video hasn't changed and a button is already firmly in place, do nothing
+    if (hasExisting && lastInjectedVideoId === currentVideoId) {
+      return;
+    }
+
+    // Lock concurrency
+    if (isInjecting) return;
+    isInjecting = true;
+
+    try {
+      const settings = await getSafeSettings();
+      if (settings.showOnPageButton === false) {
+        cleanupExistingButtons();
+        return;
       }
 
-      // If URL changed or previous container became hidden/detached, remove and re-inject
-      existing.remove();
-    }
+      const targetInfo = findTargetContainer();
+      if (!targetInfo || !targetInfo.element) {
+        return; // DOM not ready
+      }
 
-    const targetInfo = findTargetContainer();
-    if (!targetInfo || !targetInfo.element) {
-      return; // DOM not ready yet
-    }
+      // If video changed or re-injecting, remove any previous instances first
+      cleanupExistingButtons();
 
-    const settings = await getSafeSettings();
-    if (settings.showOnPageButton === false) {
-      removeExistingButton();
-      return;
-    }
+      const accounts = settings.accounts || [{ index: 0, label: 'アカウント 0' }];
+      const defaultIndex = settings.defaultAccountIndex ?? 0;
+      const activeAccount = accounts.find(a => a.index === defaultIndex) || accounts[0];
 
-    const accounts = settings.accounts || [{ index: 0, label: 'アカウント 0' }];
-    const defaultIndex = settings.defaultAccountIndex ?? 0;
-    const activeAccount = accounts.find(a => a.index === defaultIndex) || accounts[0];
+      // Create button container
+      const container = document.createElement('div');
+      container.id = BUTTON_CONTAINER_ID;
+      container.className = BUTTON_CLASS;
 
-    // Build button container
-    const container = document.createElement('div');
-    container.id = 'yt-gemini-summary-container';
-    container.className = 'yt-gemini-btn-container';
+      // Main button
+      const mainBtn = document.createElement('button');
+      mainBtn.className = 'yt-gemini-summary-btn';
+      mainBtn.title = `Geminiで要約 (${activeAccount.label || `アカウント ${activeAccount.index}`})`;
+      mainBtn.innerHTML = `
+        ${SPARKLE_ICON_SVG}
+        <span>Geminiで要約</span>
+        ${accounts.length > 1 ? `<span class="yt-gemini-account-badge">u/${activeAccount.index}</span>` : ''}
+      `;
 
-    // Main button
-    const mainBtn = document.createElement('button');
-    mainBtn.className = 'yt-gemini-summary-btn';
-    mainBtn.title = `Geminiで要約 (${activeAccount.label || `アカウント ${activeAccount.index}`})`;
-    mainBtn.innerHTML = `
-      ${SPARKLE_ICON_SVG}
-      <span>Geminiで要約</span>
-      ${accounts.length > 1 ? `<span class="yt-gemini-account-badge">u/${activeAccount.index}</span>` : ''}
-    `;
-
-    mainBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      runSummarize(defaultIndex);
-    });
-
-    container.appendChild(mainBtn);
-
-    // Dropdown for multiple accounts
-    if (accounts.length > 1) {
-      const dropdownBtn = document.createElement('button');
-      dropdownBtn.className = 'yt-gemini-dropdown-btn';
-      dropdownBtn.title = '別のアカウントを選択';
-      dropdownBtn.innerHTML = '▾';
-
-      const menu = document.createElement('div');
-      menu.className = 'yt-gemini-menu';
-
-      const accHeader = document.createElement('div');
-      accHeader.className = 'yt-gemini-menu-header';
-      accHeader.textContent = '送信先アカウント';
-      menu.appendChild(accHeader);
-
-      accounts.forEach((acc) => {
-        const item = document.createElement('div');
-        item.className = `yt-gemini-menu-item ${acc.index === defaultIndex ? 'active' : ''}`;
-        item.innerHTML = `<span>${escapeHtml(acc.label || `アカウント ${acc.index}`)}</span><span>u/${acc.index}</span>`;
-        item.addEventListener('click', (e) => {
-          e.stopPropagation();
-          menu.classList.remove('open');
-          runSummarize(acc.index);
-        });
-        menu.appendChild(item);
-      });
-
-      dropdownBtn.addEventListener('click', (e) => {
+      mainBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        menu.classList.toggle('open');
+        runSummarize(defaultIndex);
       });
 
-      document.addEventListener('click', () => {
-        menu.classList.remove('open');
-      });
+      container.appendChild(mainBtn);
 
-      container.appendChild(dropdownBtn);
-      container.appendChild(menu);
-    }
+      // Dropdown menu for multiple accounts
+      if (accounts.length > 1) {
+        const dropdownBtn = document.createElement('button');
+        dropdownBtn.className = 'yt-gemini-dropdown-btn';
+        dropdownBtn.title = '別のアカウントを選択';
+        dropdownBtn.innerHTML = '▾';
 
-    // Insert according to position
-    const { element, position } = targetInfo;
-    try {
+        const menu = document.createElement('div');
+        menu.className = 'yt-gemini-menu';
+
+        const accHeader = document.createElement('div');
+        accHeader.className = 'yt-gemini-menu-header';
+        accHeader.textContent = '送信先アカウント';
+        menu.appendChild(accHeader);
+
+        accounts.forEach((acc) => {
+          const item = document.createElement('div');
+          item.className = `yt-gemini-menu-item ${acc.index === defaultIndex ? 'active' : ''}`;
+          item.innerHTML = `<span>${escapeHtml(acc.label || `アカウント ${acc.index}`)}</span><span>u/${acc.index}</span>`;
+          item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menu.classList.remove('open');
+            runSummarize(acc.index);
+          });
+          menu.appendChild(item);
+        });
+
+        dropdownBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menu.classList.toggle('open');
+        });
+
+        document.addEventListener('click', () => {
+          menu.classList.remove('open');
+        });
+
+        container.appendChild(dropdownBtn);
+        container.appendChild(menu);
+      }
+
+      // Insert strictly once
+      const { element, position } = targetInfo;
       if (position === 'after' && element.parentElement) {
         element.parentElement.insertBefore(container, element.nextSibling);
       } else if (position === 'prepend' && element.firstChild) {
@@ -251,15 +284,16 @@
       } else {
         element.appendChild(container);
       }
-      lastInjectedUrl = currentUrl;
-    } catch (insertErr) {
-      console.warn('[YouTube Summarizer] Failed to insert button:', insertErr);
-    }
-  }
 
-  function removeExistingButton() {
-    const existing = document.getElementById('yt-gemini-summary-container');
-    if (existing) existing.remove();
+      lastInjectedVideoId = currentVideoId;
+
+      // Final sanity check: ensure no other buttons were inserted in parallel
+      deduplicateButtons();
+    } catch (err) {
+      console.warn('[YouTube Summarizer] Button injection error:', err);
+    } finally {
+      isInjecting = false;
+    }
   }
 
   /**
@@ -289,45 +323,43 @@
     }[m]));
   }
 
-  // Event Listeners for YouTube navigation
+  // Debounced injection trigger
+  let debounceTimer = null;
+  function scheduleInjection(delay = 300) {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      injectSummarizeButton();
+    }, delay);
+  }
+
+  // YouTube Navigation and lifecycle events
   window.addEventListener('yt-navigate-finish', () => {
-    setTimeout(tryInjectButton, 200);
-    setTimeout(tryInjectButton, 800);
-    setTimeout(tryInjectButton, 1800);
+    scheduleInjection(200);
   });
 
   window.addEventListener('yt-page-data-updated', () => {
-    setTimeout(tryInjectButton, 300);
-    setTimeout(tryInjectButton, 1000);
+    scheduleInjection(300);
   });
 
   window.addEventListener('load', () => {
-    tryInjectButton();
+    scheduleInjection(100);
   });
 
-  // Safety net: Continuous check with MutationObserver
+  // DOM Mutation Observer: only triggers when watch page and no button exists
   const observer = new MutationObserver(() => {
     if (isWatchPage()) {
-      const btn = document.getElementById('yt-gemini-summary-container');
-      if (!btn || !document.body.contains(btn)) {
-        tryInjectButton();
+      const btns = document.querySelectorAll(`.${BUTTON_CLASS}, #${BUTTON_CONTAINER_ID}`);
+      if (btns.length === 0) {
+        scheduleInjection(300);
+      } else if (btns.length > 1) {
+        deduplicateButtons();
       }
     }
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // Periodic safety check every 1.2 seconds if on watch page and button is missing
-  setInterval(() => {
-    if (isWatchPage()) {
-      const btn = document.getElementById('yt-gemini-summary-container');
-      if (!btn || !document.body.contains(btn)) {
-        tryInjectButton();
-      }
-    }
-  }, 1200);
-
   // Initial trigger
-  tryInjectButton();
+  scheduleInjection(100);
 
 })();
