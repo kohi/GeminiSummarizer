@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Web & YouTube to Gemini Summarizer (広告カット・アカウント指定対応)",
-  "version": "1.1.3",
+  "name": "Web & YouTube to Gemini Summarizer (v1.2.0 広告カット・アカウント指定対応)",
+  "version": "1.2.0",
   "description": "Webページ（広告自動除去）やYouTube動画をGoogle Geminiに直接送信して要約・重要ポイントを出力。複数アカウント切り替え対応。",
   "icons": {
     "16": "icons/icon-16.png",
@@ -15,7 +15,7 @@
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
     },
-    "default_title": "Geminiで要約 (Web & YouTube)"
+    "default_title": "Geminiで要約 (Web & YouTube v1.2.0)"
   },
   "options_ui": {
     "page": "options/options.html",
