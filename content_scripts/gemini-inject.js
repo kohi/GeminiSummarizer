@@ -4,6 +4,11 @@
 (function () {
   'use strict';
 
+  // Only run in the top-level window (prevent running inside iframes)
+  if (window !== window.top) {
+    return;
+  }
+
   // Check if current URL contains a summarize task ID
   const urlParams = new URLSearchParams(window.location.search);
   const taskId = urlParams.get('summarize_task_id');
@@ -11,10 +16,6 @@
   if (!taskId) {
     return; // No active task on this tab
   }
-
-  // Clean URL to prevent re-execution on refresh
-  const cleanUrl = window.location.origin + window.location.pathname;
-  window.history.replaceState(null, '', cleanUrl);
 
   console.log(`[Gemini Summarizer] Processing Task ID: ${taskId}`);
 
@@ -28,21 +29,33 @@
       return;
     }
 
-    // Immediately remove from pending tasks
+    // Remove task from storage now that we have retrieved it
     delete pendingTasks[taskId];
     await chrome.storage.local.set({ pendingTasks });
 
+    // Clean URL query parameter without triggering page reload
+    try {
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState(null, '', cleanUrl);
+    } catch (e) {
+      // ignore
+    }
+
     showStatusToast('✨ 要約プロンプトを準備中...');
 
-    // Wait for chat input box to appear
+    // Wait for chat input box to appear in DOM
     try {
-      const inputElement = await waitForInputElement(25000);
+      await waitForInputElement(25000);
       showStatusToast('📝 プロンプトを入力中...');
-      await injectPrompt(inputElement, task.prompt);
+
+      const injected = await safelyInjectPrompt(task.prompt);
+      if (!injected) {
+        throw new Error('Failed to inject prompt into input element');
+      }
 
       if (task.autoSubmit) {
         showStatusToast('🚀 要約を自動送信中...');
-        const submitted = await robustSubmit(inputElement);
+        const submitted = await robustSubmit();
         if (submitted) {
           showStatusToast('✅ 送信完了！Geminiが要約を生成しています');
         } else {
@@ -71,7 +84,7 @@
 
       function check() {
         const el = findInputBox();
-        if (el) {
+        if (el && document.contains(el)) {
           resolve(el);
           return;
         }
@@ -106,10 +119,12 @@
     ];
 
     for (const selector of selectors) {
-      const element = document.querySelector(selector);
-      if (element && isVisible(element)) {
-        return element;
-      }
+      try {
+        const element = document.querySelector(selector);
+        if (element && isVisible(element)) {
+          return element;
+        }
+      } catch (e) {}
     }
     return null;
   }
@@ -119,64 +134,95 @@
   }
 
   /**
-   * Inject text into the contenteditable / textarea with all required framework events
+   * Safely inject prompt text without throwing addRange / DOMException errors
    */
-  async function injectPrompt(inputEl, text) {
-    inputEl.focus();
-    await sleep(200);
+  async function safelyInjectPrompt(text) {
+    // Retry finding the freshest alive element up to 5 times
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const inputEl = findInputBox();
+      if (!inputEl || !document.contains(inputEl)) {
+        await sleep(300);
+        continue;
+      }
 
-    if (inputEl.tagName.toLowerCase() === 'textarea') {
-      inputEl.value = text;
-      inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-      inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-      return;
+      inputEl.focus();
+      await sleep(150);
+
+      // If it's a standard textarea
+      if (inputEl.tagName.toLowerCase() === 'textarea') {
+        inputEl.value = text;
+        inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+        return true;
+      }
+
+      // Contenteditable injection
+      let inserted = false;
+
+      // Method 1: execCommand with safe range selection
+      try {
+        if (document.contains(inputEl)) {
+          const selection = window.getSelection();
+          if (selection) {
+            selection.removeAllRanges();
+            const range = document.createRange();
+            range.selectNodeContents(inputEl);
+            selection.addRange(range);
+            inserted = document.execCommand('insertText', false, text);
+          }
+        }
+      } catch (rangeErr) {
+        console.warn('[Gemini Summarizer] execCommand failed, falling back to direct DOM:', rangeErr);
+        inserted = false;
+      }
+
+      // Method 2: Direct DOM node population if execCommand failed or text is empty
+      if (!inserted || !inputEl.textContent.trim()) {
+        try {
+          inputEl.innerHTML = '';
+          const lines = text.split('\n');
+          lines.forEach((line) => {
+            const p = document.createElement('p');
+            p.textContent = line || '\u00A0';
+            inputEl.appendChild(p);
+          });
+          inserted = true;
+        } catch (domErr) {
+          console.warn('[Gemini Summarizer] Direct DOM injection error:', domErr);
+        }
+      }
+
+      // Dispatch comprehensive synthetic events to notify Angular/Lit forms
+      try {
+        inputEl.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
+        inputEl.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
+        inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+        inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Unidentified', bubbles: true, composed: true }));
+        inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Unidentified', bubbles: true, composed: true }));
+      } catch (evtErr) {}
+
+      await sleep(300);
+
+      // Verify text is present in input
+      if (inputEl.textContent.trim().length > 0) {
+        return true;
+      }
+
+      await sleep(400);
     }
 
-    // Clear existing content
-    inputEl.innerHTML = '';
-
-    // Method 1: execCommand('insertText') is best for rich-text editors (Quill, Lit, Angular)
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(inputEl);
-    selection.removeAllRanges();
-    selection.addRange(range);
-
-    let inserted = false;
-    try {
-      inserted = document.execCommand('insertText', false, text);
-    } catch (e) {
-      inserted = false;
-    }
-
-    // Fallback: direct paragraph elements insertion
-    if (!inserted || !inputEl.textContent.trim()) {
-      inputEl.innerHTML = '';
-      const lines = text.split('\n');
-      lines.forEach((line) => {
-        const p = document.createElement('p');
-        p.textContent = line || '\u00A0';
-        inputEl.appendChild(p);
-      });
-    }
-
-    // Comprehensive synthetic events to wake up Angular / Lit / React reactive binders
-    inputEl.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
-    inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-    inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-    inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Unidentified', bubbles: true, composed: true }));
-    inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Unidentified', bubbles: true, composed: true }));
-
-    await sleep(300);
+    return false;
   }
 
   /**
-   * Robust Submit: tries multiple mechanisms (Click send button, Enter key, Container dispatch)
+   * Robust Submit: tries multiple mechanisms (Click send button, Enter key)
    */
-  async function robustSubmit(inputEl) {
-    // Attempt multiple times as Gemini may take a moment to enable the send button
+  async function robustSubmit() {
     for (let attempt = 0; attempt < 25; attempt++) {
       await sleep(350);
+
+      const inputEl = findInputBox();
 
       // Check if send button is available and enabled
       const sendButton = findSendButton();
@@ -188,24 +234,25 @@
           sendButton.click();
           await sleep(500);
 
-          // Verify if submitted (either button changed to stop or input cleared or streaming started)
           if (isSubmissionTriggered()) {
             return true;
           }
         }
       }
 
-      // Simultaneously try Enter key event on input element
-      inputEl.focus();
-      inputEl.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter',
-        code: 'Enter',
-        keyCode: 13,
-        which: 13,
-        bubbles: true,
-        composed: true,
-        cancelable: true
-      }));
+      // Simultaneously try Enter key event on input element if present
+      if (inputEl && document.contains(inputEl)) {
+        inputEl.focus();
+        inputEl.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          composed: true,
+          cancelable: true
+        }));
+      }
 
       await sleep(300);
       if (isSubmissionTriggered()) {
@@ -220,7 +267,6 @@
    * Check if Gemini has started generating / submitted prompt
    */
   function isSubmissionTriggered() {
-    // Check for Stop generating button or loading indicators
     const stopSelectors = [
       'button[aria-label*="停止"]',
       'button[aria-label*="Stop"]',
@@ -229,8 +275,10 @@
       '.generating'
     ];
     for (const sel of stopSelectors) {
-      const el = document.querySelector(sel);
-      if (el && isVisible(el)) return true;
+      try {
+        const el = document.querySelector(sel);
+        if (el && isVisible(el)) return true;
+      } catch (e) {}
     }
     return false;
   }
@@ -265,9 +313,7 @@
             }
           }
         }
-      } catch (e) {
-        // ignore selector errors
-      }
+      } catch (e) {}
     }
 
     // Secondary search: Look inside input area container
