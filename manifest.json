@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Web & YouTube to Gemini Summarizer (広告カット・アカウント指定対応)",
-  "version": "1.1.0",
+  "version": "1.1.3",
   "description": "Webページ（広告自動除去）やYouTube動画をGoogle Geminiに直接送信して要約・重要ポイントを出力。複数アカウント切り替え対応。",
   "icons": {
     "16": "icons/icon-16.png",
