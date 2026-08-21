@@ -4,43 +4,79 @@
 (function () {
   'use strict';
 
-  // Only run in the top-level window (prevent running inside iframes)
+  // Only run in the top-level window (never inside iframes)
   if (window !== window.top) {
     return;
   }
 
   // Check if current URL contains a summarize task ID
   const urlParams = new URLSearchParams(window.location.search);
-  const taskId = urlParams.get('summarize_task_id');
+  let taskId = urlParams.get('summarize_task_id');
 
-  if (!taskId) {
-    return; // No active task on this tab
-  }
-
-  console.log(`[Gemini Summarizer] Processing Task ID: ${taskId}`);
-
-  // Fetch task data from storage
-  chrome.storage.local.get('pendingTasks', async (result) => {
-    const pendingTasks = result.pendingTasks || {};
-    const task = pendingTasks[taskId];
-
-    if (!task) {
-      console.warn(`[Gemini Summarizer] Task ${taskId} not found or already consumed.`);
-      return;
-    }
-
-    // Remove task from storage now that we have retrieved it
-    delete pendingTasks[taskId];
-    await chrome.storage.local.set({ pendingTasks });
-
-    // Clean URL query parameter without triggering page reload
+  // Clean URL query parameter without reloading page
+  if (taskId) {
     try {
       const cleanUrl = window.location.origin + window.location.pathname;
       window.history.replaceState(null, '', cleanUrl);
-    } catch (e) {
-      // ignore
+    } catch (e) {}
+  }
+
+  // Fetch task from storage (supports fallback for recently created active tasks)
+  chrome.storage.local.get(['pendingTasks', 'latestTaskId'], async (result) => {
+    const pendingTasks = result.pendingTasks || {};
+    const now = Date.now();
+
+    // Cleanup expired tasks older than 5 minutes
+    Object.keys(pendingTasks).forEach((key) => {
+      if (pendingTasks[key].createdAt && now - pendingTasks[key].createdAt > 300000) {
+        delete pendingTasks[key];
+      }
+    });
+
+    let targetTask = null;
+    let targetTaskId = taskId;
+
+    // 1. Try URL taskId
+    if (targetTaskId && pendingTasks[targetTaskId]) {
+      targetTask = pendingTasks[targetTaskId];
     }
 
+    // 2. Fallback: If URL has no taskId (e.g. stripped by 302 redirect), check latest task within 45 seconds
+    if (!targetTask) {
+      const latestId = result.latestTaskId;
+      if (latestId && pendingTasks[latestId] && (now - pendingTasks[latestId].createdAt < 45000)) {
+        targetTask = pendingTasks[latestId];
+        targetTaskId = latestId;
+      }
+    }
+
+    // 3. Fallback: Find the newest pending task created within 45 seconds
+    if (!targetTask) {
+      const recentKeys = Object.keys(pendingTasks).filter(
+        (key) => !pendingTasks[key].completed && now - pendingTasks[key].createdAt < 45000
+      );
+      if (recentKeys.length > 0) {
+        recentKeys.sort((a, b) => pendingTasks[b].createdAt - pendingTasks[a].createdAt);
+        targetTaskId = recentKeys[0];
+        targetTask = pendingTasks[targetTaskId];
+      }
+    }
+
+    if (!targetTask) {
+      if (taskId) {
+        console.log(`[Gemini Summarizer] Task ${taskId} already processed or expired.`);
+      }
+      return;
+    }
+
+    // Avoid double execution on the same tab
+    if (targetTask.inProgress) {
+      return;
+    }
+    targetTask.inProgress = true;
+    await chrome.storage.local.set({ pendingTasks });
+
+    console.log(`[Gemini Summarizer] Processing Task: ${targetTaskId}`);
     showStatusToast('✨ 要約プロンプトを準備中...');
 
     // Wait for chat input box to appear in DOM
@@ -48,12 +84,12 @@
       await waitForInputElement(25000);
       showStatusToast('📝 プロンプトを入力中...');
 
-      const injected = await safelyInjectPrompt(task.prompt);
+      const injected = await safelyInjectPrompt(targetTask.prompt);
       if (!injected) {
         throw new Error('Failed to inject prompt into input element');
       }
 
-      if (task.autoSubmit) {
+      if (targetTask.autoSubmit) {
         showStatusToast('🚀 要約を自動送信中...');
         const submitted = await robustSubmit();
         if (submitted) {
@@ -64,14 +100,16 @@
       } else {
         showStatusToast('💡 プロンプトを入力しました。Enterキーで送信できます');
       }
+
+      // Mark completed and clean up
+      delete pendingTasks[targetTaskId];
+      await chrome.storage.local.set({ pendingTasks, latestTaskId: null });
     } catch (err) {
       console.error('[Gemini Summarizer] Failed to inject prompt:', err);
       showStatusToast('⚠️ 自動入力に失敗しました。プロンプトをクリップボードにコピーしました', true);
       try {
-        navigator.clipboard.writeText(task.prompt);
-      } catch (clipErr) {
-        // ignore
-      }
+        navigator.clipboard.writeText(targetTask.prompt);
+      } catch (clipErr) {}
     }
   });
 
@@ -137,7 +175,6 @@
    * Safely inject prompt text without throwing addRange / DOMException errors
    */
   async function safelyInjectPrompt(text) {
-    // Retry finding the freshest alive element up to 5 times
     for (let attempt = 0; attempt < 5; attempt++) {
       const inputEl = findInputBox();
       if (!inputEl || !document.contains(inputEl)) {
@@ -148,7 +185,7 @@
       inputEl.focus();
       await sleep(150);
 
-      // If it's a standard textarea
+      // Textarea input
       if (inputEl.tagName.toLowerCase() === 'textarea') {
         inputEl.value = text;
         inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
@@ -172,11 +209,10 @@
           }
         }
       } catch (rangeErr) {
-        console.warn('[Gemini Summarizer] execCommand failed, falling back to direct DOM:', rangeErr);
         inserted = false;
       }
 
-      // Method 2: Direct DOM node population if execCommand failed or text is empty
+      // Method 2: Direct DOM node population
       if (!inserted || !inputEl.textContent.trim()) {
         try {
           inputEl.innerHTML = '';
@@ -187,12 +223,10 @@
             inputEl.appendChild(p);
           });
           inserted = true;
-        } catch (domErr) {
-          console.warn('[Gemini Summarizer] Direct DOM injection error:', domErr);
-        }
+        } catch (domErr) {}
       }
 
-      // Dispatch comprehensive synthetic events to notify Angular/Lit forms
+      // Dispatch comprehensive synthetic events
       try {
         inputEl.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
         inputEl.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
@@ -204,7 +238,6 @@
 
       await sleep(300);
 
-      // Verify text is present in input
       if (inputEl.textContent.trim().length > 0) {
         return true;
       }
@@ -224,7 +257,7 @@
 
       const inputEl = findInputBox();
 
-      // Check if send button is available and enabled
+      // Check send button
       const sendButton = findSendButton();
       if (sendButton) {
         const isAriaDisabled = sendButton.getAttribute('aria-disabled') === 'true';
@@ -240,7 +273,7 @@
         }
       }
 
-      // Simultaneously try Enter key event on input element if present
+      // Try Enter key event
       if (inputEl && document.contains(inputEl)) {
         inputEl.focus();
         inputEl.dispatchEvent(new KeyboardEvent('keydown', {
@@ -316,7 +349,6 @@
       } catch (e) {}
     }
 
-    // Secondary search: Look inside input area container
     const richTextarea = document.querySelector('rich-textarea');
     if (richTextarea) {
       const container = richTextarea.closest('.input-area') || 

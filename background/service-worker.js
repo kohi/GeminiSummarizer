@@ -263,7 +263,7 @@ async function triggerSummarize({ url, title, content, accountIndex, promptTempl
   const tasksStorage = await chrome.storage.local.get("pendingTasks");
   const pendingTasks = tasksStorage.pendingTasks || {};
   pendingTasks[taskId] = taskData;
-  await chrome.storage.local.set({ pendingTasks });
+  await chrome.storage.local.set({ pendingTasks, latestTaskId: taskId });
 
   const targetUrl = getGeminiUrl(finalAccountIndex, taskId);
 

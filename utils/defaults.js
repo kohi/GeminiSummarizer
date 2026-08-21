@@ -111,7 +111,7 @@ const DEFAULT_ACCOUNTS = [
 ];
 
 const DEFAULT_SETTINGS = {
-  version: "1.1.0",
+  version: "1.1.2",
   accounts: DEFAULT_ACCOUNTS,
   defaultAccountIndex: 0,
   autoSubmit: true,
@@ -125,33 +125,25 @@ const DEFAULT_SETTINGS = {
 };
 
 /**
- * Load settings with automatic migration for old template formats
+ * Load settings with automatic migration
  */
 async function loadSettings() {
   return new Promise((resolve) => {
     chrome.storage.sync.get(DEFAULT_SETTINGS, async (items) => {
       const merged = { ...DEFAULT_SETTINGS, ...items };
 
-      // Ensure accounts array is valid
       if (!merged.accounts || merged.accounts.length === 0) {
         merged.accounts = DEFAULT_ACCOUNTS;
       }
 
-      // Check if templates need migration (e.g. from v1.0.0 where only YouTube templates existed without category)
-      let needsMigration = false;
       const templates = merged.promptTemplates || [];
       const hasWebTemplate = templates.some(t => t.id === 'web_standard' || t.category === 'web');
 
-      if (!hasWebTemplate || merged.version !== '1.1.0') {
-        // Migrate templates: replace or prepend new Web templates
+      if (!hasWebTemplate || merged.version !== '1.1.2') {
         merged.promptTemplates = DEFAULT_PROMPT_TEMPLATES;
         merged.activeWebPromptId = 'web_standard';
         merged.activeYtPromptId = 'yt_standard';
-        merged.version = '1.1.0';
-        needsMigration = true;
-      }
-
-      if (needsMigration) {
+        merged.version = '1.1.2';
         await saveSettings(merged);
       }
 
@@ -197,11 +189,12 @@ function isYouTubeUrl(url) {
 }
 
 /**
- * Generate Gemini URL for the specified account index
+ * Generate Gemini URL for the specified account index (Direct to /app to avoid 302 redirects)
  */
 function getGeminiUrl(accountIndex, taskId) {
   const idx = parseInt(accountIndex, 10) || 0;
-  let url = `https://gemini.google.com/u/${idx}/`;
+  // Use /app directly to prevent Google from redirecting from / to /app and dropping task queries
+  let url = `https://gemini.google.com/u/${idx}/app`;
   if (taskId) {
     url += `?summarize_task_id=${encodeURIComponent(taskId)}`;
   }
