@@ -78,100 +78,123 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 /**
- * Extract clean content from active tab using scripting API
+ * Extract clean content from active tab using scripting API with robust fallback
  */
 async function extractContentFromTab(tabId, maxChars = 12000) {
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId },
       func: (maxLen) => {
-        const NOISE_SELECTORS = [
-          'script', 'style', 'noscript', 'iframe', 'svg', 'canvas',
-          '.ad', '.ads', '.advertisement', '.ad-container', '.ad-box', '.ad-wrapper',
-          '.google-auto-placed', '[id*="google_ads"]', '[id*="ad-"]', '[id*="ad_"]',
-          '[class*="google_ads"]', '[class*="ad-slot"]', '[class*="advert"]',
-          '[aria-label*="advertisement" i]', '[aria-label*="広告" i]',
-          'ins.adsbygoogle', '.yom-ad', '.sponsored', '.sponsor',
-          'header', 'footer', 'nav', 'aside',
-          '[role="banner"]', '[role="navigation"]', '[role="complementary"]', '[role="search"]',
-          '.header', '.footer', '.navbar', '.nav', '.menu', '.site-header', '.site-footer',
-          '.sidebar', '.side-bar', '#sidebar', '#side-nav',
-          '.social-share', '.share-buttons', '.sns-share', '.social-links',
-          '.comments', '#comments', '.comment-section', '.disqus', '#disqus_thread',
-          '.modal', '.popup', '.cookie-banner', '#cookie-consent'
-        ];
+        try {
+          const NOISE_SELECTORS = [
+            'script', 'style', 'noscript', 'iframe', 'svg', 'canvas',
+            '.ad', '.ads', '.advertisement', '.ad-container', '.ad-box', '.ad-wrapper',
+            '.google-auto-placed', '[id*="google_ads"]', '[id*="ad-"]', '[id*="ad_"]',
+            '[class*="google_ads"]', '[class*="ad-slot"]', '[class*="advert"]',
+            '[aria-label*="advertisement" i]', '[aria-label*="広告" i]',
+            'ins.adsbygoogle', '.yom-ad', '.sponsored', '.sponsor',
+            'header', 'footer', 'nav', 'aside',
+            '[role="banner"]', '[role="navigation"]', '[role="complementary"]', '[role="search"]',
+            '.header', '.footer', '.navbar', '.nav', '.menu', '.site-header', '.site-footer',
+            '.sidebar', '.side-bar', '#sidebar', '#side-nav',
+            '.social-share', '.share-buttons', '.sns-share', '.social-links',
+            '.comments', '#comments', '.comment-section', '.disqus', '#disqus_thread',
+            '.modal', '.popup', '.cookie-banner', '#cookie-consent'
+          ];
 
-        const MAIN_SELECTORS = [
-          'article', 'main', '[role="main"]', '.article-body', '.article-content',
-          '.post-content', '.entry-content', '.story-body', '#main-content', '#content'
-        ];
+          const MAIN_SELECTORS = [
+            'article', 'main', '[role="main"]', '.article-body', '.article-content',
+            '.post-content', '.entry-content', '.story-body', '#main-content', '#content'
+          ];
 
-        const docClone = document.cloneNode(true);
-        NOISE_SELECTORS.forEach(sel => {
-          try { docClone.querySelectorAll(sel).forEach(el => el.remove()); } catch(e) {}
-        });
-
-        let mainEl = null;
-        for (const sel of MAIN_SELECTORS) {
-          const el = docClone.querySelector(sel);
-          if (el && el.innerText && el.innerText.trim().length > 150) {
-            mainEl = el;
-            break;
+          let docClone;
+          try {
+            docClone = document.cloneNode(true);
+            NOISE_SELECTORS.forEach(sel => {
+              try { docClone.querySelectorAll(sel).forEach(el => el.remove()); } catch(e) {}
+            });
+          } catch (cloneErr) {
+            docClone = document.body;
           }
-        }
-        if (!mainEl) mainEl = docClone.body || docClone;
 
-        // Clean text formatting
-        const blocks = [];
-        const blockTags = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'PRE', 'DIV', 'SECTION', 'ARTICLE']);
-
-        function walk(curr) {
-          if (curr.nodeType === Node.TEXT_NODE) {
-            const text = curr.textContent.trim();
-            if (text) blocks.push(text);
-            return;
+          let mainEl = null;
+          for (const sel of MAIN_SELECTORS) {
+            try {
+              const el = docClone.querySelector(sel);
+              if (el && el.innerText && el.innerText.trim().length > 150) {
+                mainEl = el;
+                break;
+              }
+            } catch (e) {}
           }
-          if (curr.nodeType !== Node.ELEMENT_NODE) return;
-          const tag = curr.tagName.toUpperCase();
-          const isBlock = blockTags.has(tag);
-          if (isBlock && blocks.length > 0 && blocks[blocks.length - 1] !== '\n') blocks.push('\n');
+          if (!mainEl) mainEl = docClone.body || docClone;
 
-          if (tag === 'H1') blocks.push('\n# ');
-          else if (tag === 'H2') blocks.push('\n## ');
-          else if (tag === 'H3') blocks.push('\n### ');
-          else if (tag === 'LI') blocks.push('\n- ');
+          // Clean text formatting
+          const blocks = [];
+          const blockTags = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'PRE', 'DIV', 'SECTION', 'ARTICLE']);
 
-          for (let child = curr.firstChild; child; child = child.nextSibling) {
-            walk(child);
+          function walk(curr) {
+            if (!curr) return;
+            if (curr.nodeType === Node.TEXT_NODE) {
+              const text = curr.textContent.trim();
+              if (text) blocks.push(text);
+              return;
+            }
+            if (curr.nodeType !== Node.ELEMENT_NODE) return;
+            const tag = curr.tagName.toUpperCase();
+            const isBlock = blockTags.has(tag);
+            if (isBlock && blocks.length > 0 && blocks[blocks.length - 1] !== '\n') blocks.push('\n');
+
+            if (tag === 'H1') blocks.push('\n# ');
+            else if (tag === 'H2') blocks.push('\n## ');
+            else if (tag === 'H3') blocks.push('\n### ');
+            else if (tag === 'LI') blocks.push('\n- ');
+
+            for (let child = curr.firstChild; child; child = child.nextSibling) {
+              walk(child);
+            }
+            if (isBlock && blocks.length > 0 && blocks[blocks.length - 1] !== '\n') blocks.push('\n');
           }
-          if (isBlock && blocks.length > 0 && blocks[blocks.length - 1] !== '\n') blocks.push('\n');
+
+          walk(mainEl);
+
+          let content = blocks.join(' ')
+            .replace(/[ \t]+/g, ' ')
+            .replace(/\n\s+\n/g, '\n\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+
+          // Fallback if structured extraction was empty
+          if (!content && document.body) {
+            content = (document.body.innerText || '').trim();
+          }
+
+          let isTruncated = false;
+          if (content.length > maxLen) {
+            content = content.slice(0, maxLen) + '\n\n...（文字数上限のため以降省略）';
+            isTruncated = true;
+          }
+
+          const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
+          const h1Title = document.querySelector('h1')?.innerText?.trim();
+          const title = ogTitle || h1Title || document.title.trim() || 'Web Page';
+
+          return {
+            title,
+            url: window.location.href,
+            content,
+            charCount: content.length,
+            isTruncated
+          };
+        } catch (innerErr) {
+          return {
+            title: document.title || 'Web Page',
+            url: window.location.href,
+            content: (document.body ? document.body.innerText.slice(0, maxLen) : ''),
+            charCount: (document.body ? document.body.innerText.length : 0),
+            isTruncated: false
+          };
         }
-
-        walk(mainEl);
-
-        let content = blocks.join(' ')
-          .replace(/[ \t]+/g, ' ')
-          .replace(/\n\s+\n/g, '\n\n')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim();
-
-        let isTruncated = false;
-        if (content.length > maxLen) {
-          content = content.slice(0, maxLen) + '\n\n...（文字数上限のため以降省略）';
-          isTruncated = true;
-        }
-
-        const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
-        const h1Title = document.querySelector('h1')?.innerText?.trim();
-        const title = ogTitle || h1Title || document.title.trim();
-
-        return {
-          title,
-          url: window.location.href,
-          content,
-          charCount: content.length,
-          isTruncated
-        };
       },
       args: [maxChars]
     });
