@@ -23,27 +23,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentTitle = '';
   let currentUrl = '';
   let extractedContent = '';
-  let isYt = false;
+  let isVideo = false;
   let settings = await loadSettings();
 
-  // 1. Get active tab and detect type
+  // 1. Get active tab and detect type by URL
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) {
     currentUrl = tab.url || '';
     currentTitle = tab.title || '';
-    isYt = isYouTubeUrl(currentUrl);
+    isVideo = isVideoSourceUrl(currentUrl);
 
-    if (isYt) {
-      currentTitle = currentTitle.replace(/ - YouTube$/, '');
+    if (isVideo) {
+      currentTitle = currentTitle.replace(/ - YouTube$/, '').replace(/ - ニコニコ動画$/, '');
       badgePageType.className = 'badge badge-yt';
-      badgePageType.textContent = '🎬 YouTube動画';
+      badgePageType.textContent = '🎬 動画サイト (自動認識)';
       badgeCleanStatus.style.display = 'none';
       extractStatsBar.style.display = 'none';
       pageTitleEl.textContent = currentTitle;
       pageUrlEl.textContent = currentUrl;
     } else {
       badgePageType.className = 'badge badge-web';
-      badgePageType.textContent = '🌐 Webページ';
+      badgePageType.textContent = '🌐 情報・Web記事 (自動認識)';
       badgeCleanStatus.style.display = 'inline-block';
       pageTitleEl.textContent = currentTitle || 'Webページ';
       pageUrlEl.textContent = currentUrl;
@@ -89,30 +89,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Populate Templates with Contextual Defaults and Independent Memory
+  // Populate Templates with Contextual Defaults by Source Type
   function populateTemplates() {
     templateSelect.innerHTML = '';
     const templates = settings.promptTemplates || DEFAULT_PROMPT_TEMPLATES;
 
-    const primaryCategory = isYt ? 'youtube' : 'web';
+    const primaryCategory = isVideo ? 'youtube' : 'web';
     
-    // Choose saved ID independently for YouTube and Web
-    let savedTemplateId = isYt 
+    // Choose saved ID independently for Video vs Web
+    let savedTemplateId = isVideo 
       ? (settings.activeYtPromptId || 'yt_standard') 
       : (settings.activeWebPromptId || 'web_standard');
 
-    // If the saved ID is not in templates or belongs to wrong category, get the first valid template for this category
+    // Check if the saved ID exists
     let activeTemplate = templates.find(t => t.id === savedTemplateId);
     if (!activeTemplate || (activeTemplate.category && activeTemplate.category !== primaryCategory)) {
       activeTemplate = templates.find(t => t.category === primaryCategory) || templates[0];
-      savedTemplateId = activeTemplate ? activeTemplate.id : (isYt ? 'yt_standard' : 'web_standard');
+      savedTemplateId = activeTemplate ? activeTemplate.id : (isVideo ? 'yt_standard' : 'web_standard');
     }
 
     const primaryOptGroup = document.createElement('optgroup');
-    primaryOptGroup.label = isYt ? '🎬 YouTube用テンプレート (自動選択)' : '🌐 Web記事用テンプレート (自動選択)';
+    primaryOptGroup.label = isVideo ? '🎬 動画用テンプレート (自動適用中)' : '🌐 情報・Web記事用テンプレート (自動適用中)';
 
     const secondaryOptGroup = document.createElement('optgroup');
-    secondaryOptGroup.label = isYt ? 'その他のテンプレート (Web用)' : 'その他のテンプレート (YouTube用)';
+    secondaryOptGroup.label = isVideo ? 'その他のテンプレート (Web用)' : 'その他のテンプレート (動画用)';
 
     templates.forEach((tmpl) => {
       const option = document.createElement('option');
@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         option.selected = true;
       }
 
-      const isPrimary = (tmpl.category === primaryCategory) || (!tmpl.category && isYt === tmpl.id.startsWith('yt_'));
+      const isPrimary = (tmpl.category === primaryCategory) || (!tmpl.category && isVideo === tmpl.id.startsWith('yt_'));
       if (isPrimary) {
         primaryOptGroup.appendChild(option);
       } else {
@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   templateSelect.addEventListener('change', () => {
     updatePromptPreview();
     const selectedId = templateSelect.value;
-    if (isYt) {
+    if (isVideo) {
       settings.activeYtPromptId = selectedId;
       saveSettings({ activeYtPromptId: selectedId });
     } else {

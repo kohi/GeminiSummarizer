@@ -15,7 +15,7 @@
           <path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/>
         </svg>
         <div>
-          <h1>Web & YouTube to Gemini Summarizer <small style="font-size: 13px; font-weight: normal; opacity: 0.8;">v1.2.0</small></h1>
+          <h1>Web & YouTube to Gemini Summarizer <small style="font-size: 13px; font-weight: normal; opacity: 0.8;">v1.2.1</small></h1>
           <p class="subtitle">広告カット・複数アカウント管理・プロンプトカスタマイズ設定</p>
         </div>
       </div>
@@ -108,7 +108,36 @@
         </div>
       </section>
 
-      <!-- Section 3: General Options -->
+      <!-- Section 3: Default Styles by Source Type -->
+      <section class="settings-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-icon">🎯</span>
+            <h2>サイト種別ごとのデフォルト要約スタイル設定</h2>
+          </div>
+          <span class="card-desc">閲覧中のURL（動画サイトか情報サイトか）に応じて、自動選択される要約スタイルを設定できます。</span>
+        </div>
+
+        <div class="options-list">
+          <div class="setting-item" style="cursor: default;">
+            <div class="setting-text">
+              <span class="setting-title">🎬 動画サイト閲覧時（YouTube, Vimeo等）のデフォルトスタイル</span>
+              <span class="setting-desc">動画ページを開いた際、ポップアップで最初に自動選択されるプロンプトです。</span>
+            </div>
+            <select id="opt-default-yt-template" class="input-field" style="width: 260px;"></select>
+          </div>
+
+          <div class="setting-item" style="cursor: default;">
+            <div class="setting-text">
+              <span class="setting-title">🌐 情報サイト閲覧時（ニュース, ブログ, 技術記事等）のデフォルトスタイル</span>
+              <span class="setting-desc">一般Webページを開いた際、ポップアップで最初に自動選択されるプロンプトです。</span>
+            </div>
+            <select id="opt-default-web-template" class="input-field" style="width: 260px;"></select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 4: General Options -->
       <section class="settings-card">
         <div class="card-header">
           <div class="card-title-group">

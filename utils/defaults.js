@@ -1,11 +1,11 @@
 // Default settings and configuration for Web & YouTube to Gemini Summarizer
 
 const DEFAULT_PROMPT_TEMPLATES = [
-  // Web Articles
+  // Web Information Sites / Articles
   {
     id: "web_standard",
     category: "web",
-    name: "🌐 Web記事・ニュース要約 (概要 + 要点 + まとめ)",
+    name: "🌐 情報サイト・記事要約 (概要 + 要点 + まとめ)",
     content: `以下のWebページの内容を、広告や不要な情報を除いて詳細かつ分かりやすく要約・まとめてください。
 
 【記事タイトル】: {title}
@@ -22,8 +22,8 @@ const DEFAULT_PROMPT_TEMPLATES = [
   {
     id: "web_quick3",
     category: "web",
-    name: "⚡ Web記事 3行サマリー",
-    content: `以下のWeb記事の内容について、要点を3行で簡潔にまとめてください。
+    name: "⚡ 情報サイト・記事 3行サマリー",
+    content: `以下のWeb記事・情報ページの内容について、要点を3行で簡潔にまとめてください。
 
 【記事タイトル】: {title}
 【記事URL】: {url}
@@ -34,7 +34,7 @@ const DEFAULT_PROMPT_TEMPLATES = [
   {
     id: "web_detailed",
     category: "web",
-    name: "📖 Web記事 構造化・詳細まとめ",
+    name: "📖 情報サイト・記事 構造化・詳細まとめ",
     content: `以下のWebページの内容を網羅的かつ構造的にまとめてください。
 記事内で語られている各トピック、論点、背景、具体例、根拠を整理し、章立てて分かりやすく解説してください。
 
@@ -56,12 +56,12 @@ const DEFAULT_PROMPT_TEMPLATES = [
 【記事本文（抜粋）】:
 {content}`
   },
-  // YouTube Videos
+  // Video Platforms (YouTube, Vimeo, Niconico, etc.)
   {
     id: "yt_standard",
     category: "youtube",
-    name: "🎬 YouTube動画 標準要約 (概要 + 要点 + 結論)",
-    content: `以下のYouTube動画の内容を詳細かつ分かりやすく要約・まとめてください。
+    name: "🎬 動画標準要約 (概要 + 要点 + 結論)",
+    content: `以下の動画の内容を詳細かつ分かりやすく要約・まとめてください。
 
 【動画タイトル】: {title}
 【動画URL】: {url}
@@ -74,8 +74,8 @@ const DEFAULT_PROMPT_TEMPLATES = [
   {
     id: "yt_quick3",
     category: "youtube",
-    name: "⚡ YouTube動画 3行サマリー",
-    content: `以下のYouTube動画の内容を、最も重要なポイントが3行でわかるように簡潔に要約してください。
+    name: "⚡ 動画 3行サマリー",
+    content: `以下の動画の内容を、最も重要なポイントが3行でわかるように簡潔に要約してください。
 
 【動画タイトル】: {title}
 【動画URL】: {url}`
@@ -83,8 +83,8 @@ const DEFAULT_PROMPT_TEMPLATES = [
   {
     id: "yt_detailed",
     category: "youtube",
-    name: "📖 YouTube動画 詳細まとめ・章立て解説",
-    content: `以下のYouTube動画の内容を詳しく網羅的にまとめてください。
+    name: "📖 動画 詳細まとめ・章立て解説",
+    content: `以下の動画の内容を詳しく網羅的にまとめてください。
 動画内で語られている論点や根拠、重要なトピックを整理し、章立てて分かりやすく解説してください。
 
 【動画タイトル】: {title}
@@ -111,7 +111,7 @@ const DEFAULT_ACCOUNTS = [
 ];
 
 const DEFAULT_SETTINGS = {
-  version: "1.2.0",
+  version: "1.2.1",
   accounts: DEFAULT_ACCOUNTS,
   defaultAccountIndex: 0,
   autoSubmit: true,
@@ -139,11 +139,11 @@ async function loadSettings() {
       const templates = merged.promptTemplates || [];
       const hasWebTemplate = templates.some(t => t.id === 'web_standard' || t.category === 'web');
 
-      if (!hasWebTemplate || merged.version !== '1.2.0') {
+      if (!hasWebTemplate || merged.version !== '1.2.1') {
         merged.promptTemplates = DEFAULT_PROMPT_TEMPLATES;
-        merged.activeWebPromptId = 'web_standard';
-        merged.activeYtPromptId = 'yt_standard';
-        merged.version = '1.2.0';
+        merged.activeWebPromptId = merged.activeWebPromptId || 'web_standard';
+        merged.activeYtPromptId = merged.activeYtPromptId || 'yt_standard';
+        merged.version = '1.2.1';
         await saveSettings(merged);
       }
 
@@ -181,11 +181,26 @@ function buildPrompt(templateString, title, url, content = "") {
 }
 
 /**
- * Check if a URL is a YouTube video URL
+ * Detect if a URL belongs to a video platform (YouTube, Vimeo, Niconico, TikTok, Twitch, etc.)
  */
-function isYouTubeUrl(url) {
+function isVideoSourceUrl(url) {
   if (!url) return false;
-  return url.includes("youtube.com/watch") || url.includes("youtu.be/") || url.includes("youtube.com/shorts/");
+  const lower = url.toLowerCase();
+  return (
+    lower.includes("youtube.com/watch") ||
+    lower.includes("youtu.be/") ||
+    lower.includes("youtube.com/shorts/") ||
+    lower.includes("vimeo.com/") ||
+    lower.includes("nicovideo.jp/watch/") ||
+    lower.includes("tiktok.com/@") ||
+    lower.includes("twitch.tv/videos/") ||
+    lower.includes("dailymotion.com/video/")
+  );
+}
+
+// Backward-compatible alias
+function isYouTubeUrl(url) {
+  return isVideoSourceUrl(url);
 }
 
 /**
@@ -193,7 +208,6 @@ function isYouTubeUrl(url) {
  */
 function getGeminiUrl(accountIndex, taskId) {
   const idx = parseInt(accountIndex, 10) || 0;
-  // Use /app directly to prevent Google from redirecting from / to /app and dropping task queries
   let url = `https://gemini.google.com/u/${idx}/app`;
   if (taskId) {
     url += `?summarize_task_id=${encodeURIComponent(taskId)}`;
@@ -209,6 +223,7 @@ if (typeof module !== 'undefined' && module.exports) {
     loadSettings,
     saveSettings,
     buildPrompt,
+    isVideoSourceUrl,
     isYouTubeUrl,
     getGeminiUrl
   };

@@ -24,12 +24,18 @@ async function updateContextMenus() {
     contexts: ["selection"]
   });
 
+  const VIDEO_URL_PATTERNS = [
+    "*://*.youtube.com/watch*", "*://youtu.be/*", "*://*.youtube.com/shorts*",
+    "*://vimeo.com/*", "*://*.nicovideo.jp/watch/*",
+    "*://*.tiktok.com/*", "*://*.twitch.tv/videos/*", "*://*.dailymotion.com/video/*"
+  ];
+
   // 3. YouTube / Video Link Summarize Root
   chrome.contextMenus.create({
     id: "gemini-summarize-yt-root",
     title: "🎬 Geminiでこの動画を要約",
     contexts: ["link"],
-    targetUrlPatterns: ["*://*.youtube.com/watch*", "*://youtu.be/*", "*://*.youtube.com/shorts/*"]
+    targetUrlPatterns: VIDEO_URL_PATTERNS
   });
 
   // Add Account Submenus
@@ -50,13 +56,13 @@ async function updateContextMenus() {
       contexts: ["selection"]
     });
 
-    // YouTube link submenu
+    // Video link submenu
     chrome.contextMenus.create({
       id: `gemini-yt-acc-${acc.index}`,
       parentId: "gemini-summarize-yt-root",
       title: `${acc.label || `アカウント ${acc.index}`}`,
       contexts: ["link"],
-      targetUrlPatterns: ["*://*.youtube.com/watch*", "*://youtu.be/*", "*://*.youtube.com/shorts/*"]
+      targetUrlPatterns: VIDEO_URL_PATTERNS
     });
   });
 }

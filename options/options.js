@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnDeleteTemplate = document.getElementById('btn-delete-template');
   const btnResetTemplates = document.getElementById('btn-reset-templates');
 
+  const optDefaultYtTemplate = document.getElementById('opt-default-yt-template');
+  const optDefaultWebTemplate = document.getElementById('opt-default-web-template');
+
   const optAutoSubmit = document.getElementById('opt-auto-submit');
   const optShowButton = document.getElementById('opt-show-button');
   const optMaxChars = document.getElementById('opt-max-chars');
@@ -89,17 +92,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   /**
-   * Render Templates Select Dropdown
+   * Render Templates Select Dropdown and Default Source Selectors
    */
   function renderTemplatesDropdown() {
     optTemplateSelect.innerHTML = '';
+    optDefaultYtTemplate.innerHTML = '';
+    optDefaultWebTemplate.innerHTML = '';
+
     const templates = currentSettings.promptTemplates || [];
 
     templates.forEach((t) => {
+      // For main template editor dropdown
       const option = document.createElement('option');
       option.value = t.id;
       option.textContent = t.name;
       optTemplateSelect.appendChild(option);
+
+      // For Video site default selector
+      const ytOption = document.createElement('option');
+      ytOption.value = t.id;
+      ytOption.textContent = t.name;
+      if (t.id === currentSettings.activeYtPromptId) {
+        ytOption.selected = true;
+      }
+      optDefaultYtTemplate.appendChild(ytOption);
+
+      // For Web information site default selector
+      const webOption = document.createElement('option');
+      webOption.value = t.id;
+      webOption.textContent = t.name;
+      if (t.id === currentSettings.activeWebPromptId) {
+        webOption.selected = true;
+      }
+      optDefaultWebTemplate.appendChild(webOption);
     });
 
     if (templates.length > 0) {
@@ -190,8 +215,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnResetTemplates.addEventListener('click', () => {
     if (confirm('すべてのプロンプトテンプレートをデフォルト状態に初期化しますか？')) {
       currentSettings.promptTemplates = JSON.parse(JSON.stringify(DEFAULT_PROMPT_TEMPLATES));
+      currentSettings.activeWebPromptId = 'web_standard';
+      currentSettings.activeYtPromptId = 'yt_standard';
       renderTemplatesDropdown();
     }
+  });
+
+  // Source Default Selectors
+  optDefaultYtTemplate.addEventListener('change', () => {
+    currentSettings.activeYtPromptId = optDefaultYtTemplate.value;
+  });
+
+  optDefaultWebTemplate.addEventListener('change', () => {
+    currentSettings.activeWebPromptId = optDefaultWebTemplate.value;
   });
 
   // Load General Settings
@@ -202,6 +238,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Save Actions
   async function performSave() {
     saveCurrentTemplateFields();
+    currentSettings.activeYtPromptId = optDefaultYtTemplate.value;
+    currentSettings.activeWebPromptId = optDefaultWebTemplate.value;
     currentSettings.autoSubmit = optAutoSubmit.checked;
     currentSettings.showOnPageButton = optShowButton.checked;
     currentSettings.maxExtractChars = parseInt(optMaxChars.value, 10) || 12000;

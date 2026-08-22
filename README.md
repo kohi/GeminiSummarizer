@@ -40,7 +40,7 @@ Webページ（ブログ、ニュース、技術記事、ドキュメントな�
 ## 📦 インストール方法（Chromeへの導入手順）
 
 ### 方法 A: 配布用ZIPをダウンロードして使う（最も簡単）
-1. [Releases ページ](https://github.com/kohi/GeminiSummarizer/releases/latest) またはリポジトリから **`GeminiSummarizer_v1.2.0.zip`** をダウンロードして解凍します。
+1. [Releases ページ](https://github.com/kohi/GeminiSummarizer/releases/latest) またはリポジトリから **`GeminiSummarizer_v1.2.1.zip`** をダウンロードして解凍します。
 2. Google Chromeを開き、アドレスバーに `chrome://extensions/` と入力して移動します。
 3. 画面右上にある **「デベロッパー モード」** のトグルスイッチを **ON** にします。
 4. 画面左上の **「パッケージ化されていない拡張機能を読み込む」**（Load unpacked）ボタンをクリックし、解凍したフォルダを選択します。
