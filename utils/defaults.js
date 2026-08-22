@@ -111,7 +111,7 @@ const DEFAULT_ACCOUNTS = [
 ];
 
 const DEFAULT_SETTINGS = {
-  version: "1.2.1",
+  version: "1.2.2",
   accounts: DEFAULT_ACCOUNTS,
   defaultAccountIndex: 0,
   autoSubmit: true,
@@ -139,11 +139,11 @@ async function loadSettings() {
       const templates = merged.promptTemplates || [];
       const hasWebTemplate = templates.some(t => t.id === 'web_standard' || t.category === 'web');
 
-      if (!hasWebTemplate || merged.version !== '1.2.1') {
+      if (!hasWebTemplate || merged.version !== '1.2.2') {
         merged.promptTemplates = DEFAULT_PROMPT_TEMPLATES;
         merged.activeWebPromptId = merged.activeWebPromptId || 'web_standard';
         merged.activeYtPromptId = merged.activeYtPromptId || 'yt_standard';
-        merged.version = '1.2.1';
+        merged.version = '1.2.2';
         await saveSettings(merged);
       }
 

@@ -1,12 +1,12 @@
 // Content script injected into YouTube pages
-// Inserts the "Geminiで要約" button cleanly and strictly prevents duplicate buttons.
+// Inserts the "Geminiで要約" button cleanly, handles context invalidation gracefully, and strictly prevents duplicates.
 
 (function () {
   'use strict';
 
   const SPARKLE_ICON_SVG = `
     <svg viewBox="0 0 24 24" width="16" height="16">
-      <path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/>
+      <path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/>
     </svg>
   `;
 
@@ -15,6 +15,17 @@
 
   let isInjecting = false;
   let lastInjectedVideoId = '';
+
+  /**
+   * Safe check for extension runtime validity (prevents Extension Context Invalidated errors)
+   */
+  function isExtensionContextValid() {
+    try {
+      return typeof chrome !== 'undefined' && !!chrome.runtime && !!chrome.runtime.id;
+    } catch (e) {
+      return false;
+    }
+  }
 
   /**
    * Check if current page is a video watch page or shorts
@@ -88,7 +99,6 @@
   function deduplicateButtons() {
     const allButtons = document.querySelectorAll(`.${BUTTON_CLASS}, #${BUTTON_CONTAINER_ID}`);
     if (allButtons.length > 1) {
-      // Keep only the first valid attached button and remove the rest
       for (let i = 1; i < allButtons.length; i++) {
         allButtons[i].remove();
       }
@@ -111,8 +121,7 @@
       return null;
     }
 
-    // Strict priority list:
-    // 1. Channel Subscribe Button Area (Most prominent and natural)
+    // 1. Channel Subscribe Button Area
     const subscribeBtn = document.querySelector('ytd-watch-metadata #subscribe-button') ||
                          document.querySelector('#subscribe-button') ||
                          document.querySelector('ytd-subscribe-button-renderer');
@@ -149,6 +158,14 @@
    * Fetch extension settings safely
    */
   async function getSafeSettings() {
+    if (!isExtensionContextValid()) {
+      return {
+        accounts: [{ index: 0, label: 'アカウント 0' }],
+        defaultAccountIndex: 0,
+        showOnPageButton: true
+      };
+    }
+
     try {
       const response = await new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'GET_SETTINGS' }, (res) => {
@@ -163,11 +180,73 @@
     } catch (e) {
       // ignore
     }
+
     return {
       accounts: [{ index: 0, label: 'アカウント 0' }],
       defaultAccountIndex: 0,
       showOnPageButton: true
     };
+  }
+
+  /**
+   * Show clear user-friendly banner when extension was reloaded in Chrome
+   */
+  function showReloadNotice() {
+    let notice = document.getElementById('yt-gemini-reload-notice');
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.id = 'yt-gemini-reload-notice';
+      Object.assign(notice.style, {
+        position: 'fixed',
+        top: '64px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: '9999999',
+        padding: '12px 24px',
+        borderRadius: '12px',
+        backgroundColor: '#1E1E1E',
+        color: '#ffffff',
+        border: '1px solid #1A73E8',
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontSize: '14px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px'
+      });
+
+      const text = document.createElement('span');
+      text.textContent = '🔄 拡張機能が更新されました。最新版を有効にするためページを再読み込みしてください。';
+      notice.appendChild(text);
+
+      const reloadBtn = document.createElement('button');
+      reloadBtn.textContent = 'ページを再読み込み (F5)';
+      Object.assign(reloadBtn.style, {
+        padding: '6px 14px',
+        backgroundColor: '#1A73E8',
+        color: '#ffffff',
+        border: 'none',
+        borderRadius: '6px',
+        cursor: 'pointer',
+        fontWeight: 'bold'
+      });
+      reloadBtn.onclick = () => window.location.reload();
+      notice.appendChild(reloadBtn);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      Object.assign(closeBtn.style, {
+        background: 'none',
+        border: 'none',
+        color: '#aaaaaa',
+        cursor: 'pointer',
+        fontSize: '16px'
+      });
+      closeBtn.onclick = () => notice.remove();
+      notice.appendChild(closeBtn);
+
+      document.body.appendChild(notice);
+    }
   }
 
   /**
@@ -181,16 +260,12 @@
     }
 
     const currentVideoId = getVideoId();
-
-    // Check if duplicate buttons already exist
     const hasExisting = deduplicateButtons();
 
-    // If video hasn't changed and a button is already firmly in place, do nothing
     if (hasExisting && lastInjectedVideoId === currentVideoId) {
       return;
     }
 
-    // Lock concurrency
     if (isInjecting) return;
     isInjecting = true;
 
@@ -203,17 +278,15 @@
 
       const targetInfo = findTargetContainer();
       if (!targetInfo || !targetInfo.element) {
-        return; // DOM not ready
+        return;
       }
 
-      // If video changed or re-injecting, remove any previous instances first
       cleanupExistingButtons();
 
       const accounts = settings.accounts || [{ index: 0, label: 'アカウント 0' }];
       const defaultIndex = settings.defaultAccountIndex ?? 0;
       const activeAccount = accounts.find(a => a.index === defaultIndex) || accounts[0];
 
-      // Create button container
       const container = document.createElement('div');
       container.id = BUTTON_CONTAINER_ID;
       container.className = BUTTON_CLASS;
@@ -275,7 +348,7 @@
         container.appendChild(menu);
       }
 
-      // Insert strictly once
+      // Insert into DOM
       const { element, position } = targetInfo;
       if (position === 'after' && element.parentElement) {
         element.parentElement.insertBefore(container, element.nextSibling);
@@ -286,8 +359,6 @@
       }
 
       lastInjectedVideoId = currentVideoId;
-
-      // Final sanity check: ensure no other buttons were inserted in parallel
       deduplicateButtons();
     } catch (err) {
       console.warn('[YouTube Summarizer] Button injection error:', err);
@@ -297,20 +368,34 @@
   }
 
   /**
-   * Trigger Summarize Request
+   * Trigger Summarize Request with robust context check
    */
   function runSummarize(accountIndex) {
+    if (!isExtensionContextValid()) {
+      showReloadNotice();
+      return;
+    }
+
     const url = getVideoUrl();
     const title = getVideoTitle();
 
-    chrome.runtime.sendMessage({
-      action: 'START_SUMMARIZE',
-      payload: {
-        url,
-        title,
-        accountIndex
-      }
-    });
+    try {
+      chrome.runtime.sendMessage({
+        action: 'START_SUMMARIZE',
+        payload: {
+          url,
+          title,
+          accountIndex
+        }
+      }, (res) => {
+        if (chrome.runtime.lastError) {
+          console.warn('Runtime message error:', chrome.runtime.lastError);
+          showReloadNotice();
+        }
+      });
+    } catch (e) {
+      showReloadNotice();
+    }
   }
 
   function escapeHtml(str) {
@@ -345,7 +430,7 @@
     scheduleInjection(100);
   });
 
-  // DOM Mutation Observer: only triggers when watch page and no button exists
+  // DOM Mutation Observer
   const observer = new MutationObserver(() => {
     if (isWatchPage()) {
       const btns = document.querySelectorAll(`.${BUTTON_CLASS}, #${BUTTON_CONTAINER_ID}`);
@@ -359,7 +444,6 @@
 
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // Initial trigger
   scheduleInjection(100);
 
 })();

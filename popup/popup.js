@@ -27,51 +27,56 @@ document.addEventListener('DOMContentLoaded', async () => {
   let settings = await loadSettings();
 
   // 1. Get active tab and detect type by URL
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) {
-    currentUrl = tab.url || '';
-    currentTitle = tab.title || '';
-    isVideo = isVideoSourceUrl(currentUrl);
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (tab) {
+      currentUrl = tab.url || '';
+      currentTitle = tab.title || '';
+      isVideo = isVideoSourceUrl(currentUrl);
 
-    if (isVideo) {
-      currentTitle = currentTitle.replace(/ - YouTube$/, '').replace(/ - ニコニコ動画$/, '');
-      badgePageType.className = 'badge badge-yt';
-      badgePageType.textContent = '🎬 動画サイト (自動認識)';
-      badgeCleanStatus.style.display = 'none';
-      extractStatsBar.style.display = 'none';
-      pageTitleEl.textContent = currentTitle;
-      pageUrlEl.textContent = currentUrl;
-    } else {
-      badgePageType.className = 'badge badge-web';
-      badgePageType.textContent = '🌐 情報・Web記事 (自動認識)';
-      badgeCleanStatus.style.display = 'inline-block';
-      pageTitleEl.textContent = currentTitle || 'Webページ';
-      pageUrlEl.textContent = currentUrl;
+      if (isVideo) {
+        currentTitle = currentTitle.replace(/ - YouTube$/, '').replace(/ - ニコニコ動画$/, '');
+        badgePageType.className = 'badge badge-yt';
+        badgePageType.textContent = '🎬 動画サイト (自動認識)';
+        badgeCleanStatus.style.display = 'none';
+        extractStatsBar.style.display = 'none';
+        pageTitleEl.textContent = currentTitle;
+        pageUrlEl.textContent = currentUrl;
+      } else {
+        badgePageType.className = 'badge badge-web';
+        badgePageType.textContent = '🌐 情報・Web記事 (自動認識)';
+        badgeCleanStatus.style.display = 'inline-block';
+        pageTitleEl.textContent = currentTitle || 'Webページ';
+        pageUrlEl.textContent = currentUrl;
 
-      // Extract clean content from active tab
-      if (tab.id && !currentUrl.startsWith('chrome://') && !currentUrl.startsWith('about:')) {
-        try {
-          const res = await sendMessagePromise({
-            action: 'EXTRACT_PAGE_CONTENT',
-            tabId: tab.id,
-            maxChars: settings.maxExtractChars || 12000
-          });
+        // Extract clean content from active tab
+        if (tab.id && !currentUrl.startsWith('chrome://') && !currentUrl.startsWith('about:') && !currentUrl.startsWith('edge://')) {
+          try {
+            const res = await sendMessagePromise({
+              action: 'EXTRACT_PAGE_CONTENT',
+              tabId: tab.id,
+              maxChars: settings.maxExtractChars || 12000
+            }, 4000);
 
-          if (res && res.success && res.data) {
-            extractedContent = res.data.content || '';
-            currentTitle = res.data.title || currentTitle;
-            pageTitleEl.textContent = currentTitle;
-            statCharCount.textContent = (res.data.charCount || 0).toLocaleString();
-            if (res.data.isTruncated) {
-              statTruncatedNote.style.display = 'inline';
+            if (res && res.success && res.data) {
+              extractedContent = res.data.content || '';
+              currentTitle = res.data.title || currentTitle;
+              pageTitleEl.textContent = currentTitle;
+              statCharCount.textContent = (res.data.charCount || 0).toLocaleString();
+              if (res.data.isTruncated) {
+                statTruncatedNote.style.display = 'inline';
+              }
+              extractStatsBar.style.display = 'flex';
             }
-            extractStatsBar.style.display = 'flex';
+          } catch (e) {
+            console.warn('Content extraction warning:', e);
           }
-        } catch (e) {
-          console.warn('Content extraction failed:', e);
         }
       }
     }
+  } catch (err) {
+    console.warn('Tab query error:', err);
   }
 
   // Populate Accounts
@@ -101,7 +106,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       ? (settings.activeYtPromptId || 'yt_standard') 
       : (settings.activeWebPromptId || 'web_standard');
 
-    // Check if the saved ID exists
     let activeTemplate = templates.find(t => t.id === savedTemplateId);
     if (!activeTemplate || (activeTemplate.category && activeTemplate.category !== primaryCategory)) {
       activeTemplate = templates.find(t => t.category === primaryCategory) || templates[0];
@@ -207,19 +211,20 @@ document.addEventListener('DOMContentLoaded', async () => {
           customPrompt,
           autoSubmit
         }
-      });
+      }, 6000);
 
       if (response && response.success) {
         setStatus('✅ Geminiを開きました！');
         setTimeout(() => window.close(), 600);
       } else {
-        setStatus('⚠️ 送信に失敗しました', true);
+        const errorMsg = response?.error || '送信に失敗しました';
+        setStatus(`⚠️ ${errorMsg}`, true);
         btnSummarize.disabled = false;
         btnSummarizeText.textContent = 'Geminiで要約を開始';
       }
     } catch (err) {
       console.error(err);
-      setStatus('⚠️ エラーが発生しました', true);
+      setStatus('⚠️ エラーが発生しました。ページを再読み込みしてください', true);
       btnSummarize.disabled = false;
       btnSummarizeText.textContent = 'Geminiで要約を開始';
     }
@@ -230,11 +235,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     statusMessageEl.style.color = isError ? '#D93025' : '#1A73E8';
   }
 
-  function sendMessagePromise(msg) {
+  function sendMessagePromise(msg, timeoutMs = 5000) {
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage(msg, (res) => {
-        resolve(res);
-      });
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: false, error: 'Timeout waiting for background service' });
+        }
+      }, timeoutMs);
+
+      try {
+        if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+          clearTimeout(timer);
+          resolved = true;
+          resolve({ success: false, error: 'Extension context invalidated' });
+          return;
+        }
+
+        chrome.runtime.sendMessage(msg, (res) => {
+          if (resolved) return;
+          clearTimeout(timer);
+          resolved = true;
+          if (chrome.runtime.lastError) {
+            resolve({ success: false, error: chrome.runtime.lastError.message });
+          } else {
+            resolve(res || { success: true });
+          }
+        });
+      } catch (err) {
+        if (!resolved) {
+          clearTimeout(timer);
+          resolved = true;
+          resolve({ success: false, error: err.message });
+        }
+      }
     });
   }
 });
